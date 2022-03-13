@@ -1,3 +1,4 @@
+from datetime import datetime
 import gzip
 import os
 from os.path import basename
@@ -7,7 +8,7 @@ import json
 from sh import pg_dump
 
 DEFAULT_DUMP_FILENAME = "dump.sql"
-DEFAULT_DUMP_CMD = ["-Fc", "-v", "--no-owner"]
+DEFAULT_DUMP_CMD = ["--no-owner"]
 DEFAULT_MANIFEST_FILENAME = 'manifest.json'
 
 POSTGRES_USER = os.environ.get("POSTGRES_USER")
@@ -16,6 +17,9 @@ POSTGRES_HOST = "db"
 POSTGRES_PORT = "5432"
 
 DATA_DIR = "/usr/src/data"
+
+def generate_filename(dbname):
+    return "{}_{}".format(dbname, datetime.now().strftime("%Y%m%d_%H%M"))
 
 def get_odoo_database(dbname):
     # Connect to your postgres DB
@@ -72,7 +76,7 @@ def create_db_dump(db_name, filename=DEFAULT_DUMP_FILENAME, cmd=[]):
     with gzip.open(path, "wb") as f:
         pg_dump(*args, _out=f, _env=_get_postgres_env())
 
-    return True
+    return (True, {'path':path})
 
 
 def add_to_zip(zipfile, filename, **kwargs):
