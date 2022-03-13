@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
 
   web:
@@ -20,9 +19,13 @@ services:
     command: celery worker --app=worker.celery --loglevel=info --logfile=logs/celery.log
     volumes:
       - ./project:/usr/src/app
+      - ./data:/usr/src/data
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - POSTGRES_PASSWORD=odoo
+      - POSTGRES_USER=odoo
+      - POSTGRES_HOST=db
     depends_on:
       - web
       - redis
@@ -42,3 +45,20 @@ services:
       - web
       - redis
       - worker
+  db:
+    image: postgres:11
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_PASSWORD: odoo
+      POSTGRES_USER: odoo
+      POSTGRES_DB: postgres
+    restart: unless-stopped
+    volumes:
+      - ./postgres:/var/lib/postgresql/data
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
