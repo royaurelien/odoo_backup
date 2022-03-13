@@ -1,81 +1,91 @@
 from celery.result import AsyncResult
+from celery import chain
 from fastapi import Body, FastAPI, Form, Request
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-
-
-from worker import create_task, dump_db
 import os
+
+import worker as wk
+import utils
+
+DEFAULT_DUMP_FS = os.environ.get("DUMP_FILESTORE", False)
+DEFAULT_DUMP_FORMAT = os.environ.get("DUMP_FORMAT", "sql")
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
-# templates = Jinja2Templates(directory="templates")
-
 
 
 @app.get("/")
 def home(request: Request):
     return JSONResponse({"request": "request"})
-    # return templates.TemplateResponse("home.html", context={"request": request})
 
 
-@app.post("/tasks", status_code=201)
-def run_task(payload = Body(...)):
-    task_type = payload["type"]
-    task = create_task.delay(int(task_type))
-    return JSONResponse({"task_id": task.id})
+# @app.post("/tasks", status_code=201)
+# def run_task(payload = Body(...)):
+#     task_type = payload["type"]
+#     task = wk.create_task.delay(int(task_type))
+#     return JSONResponse({"task_id": task.id})
 
 
 @app.get("/tasks/{task_id}")
 def get_status(task_id):
     task_result = AsyncResult(task_id)
+
     result = {
         "task_id": task_id,
         "task_status": task_result.status,
-        "task_result": task_result.result
+        "all": [(t.name, t.status) for t in utils.iter_children(task_result)],
+        # "task_result": task_result.result,
+        # "tasks_status": [t.status for t in unpack_chain(task_result)],
     }
+    # task_result.forget()
+
+
     return JSONResponse(result)
 
 
 @app.post("/dump", status_code=201)
 def run_task_dump(payload = Body(...)):
-    db_name = payload["name"]
-    task = dump_db.delay(db_name)
-    return JSONResponse({"task_id": task.id})
+    data = {'db_name': payload["name"]}
+
+    filestore = payload.get('filestore', DEFAULT_DUMP_FS)
+    dump = payload.get('dump', DEFAULT_DUMP_FORMAT)
+
+    tasks = chain(
+        # wk.create_env.s(data),
+        # wk.create_odoo_manifest.s(),
+        # wk.dump_db.s(),
+        # wk.add_to_zip.s(),
+        # wk.add_filestore.s(data).set(link_error=wk.error_handler.s()),
+        wk.add_filestore.s(data),
+    ).on_error(wk.error_handler.s()).apply_async()
+
+    result = {
+        "task_id": tasks.id,
+        # "parent_id": [t.id for t in list(utils.unpack_parents(tasks))][-1],
+        # "all": store(tasks)
+    }
+    return JSONResponse(result)
+
 
 
 @app.get("/fast/{task_id}")
 async def fast_download(task_id):
 
-    task_result = AsyncResult(task_id)
-    if not task_result.result:
-        return JSONResponse({'status': 'No task found motherf****r !'})
+    try:
+        filepath = utils._get_file_from_task(task_id)
+    except ValueError as error:
+        return JSONResponse({'status': error})
 
-    # result = eval(task_result.result)
-    path = task_result.result[1].get('path', False)
-
-    if not os.path.isfile(path):
-        return JSONResponse({'status': 'No file found at {}'.format(path)})
-
-    return FileResponse(path)
+    return FileResponse(filepath)
 
 
 @app.get("/download/{task_id}")
 def download(task_id):
-    def iterfile(path):
-        with open(path, mode="rb") as file_like:
-            yield from file_like
 
+    try:
+        filepath = utils._get_file_from_task(task_id)
+    except ValueError as error:
+        return JSONResponse({'status': error})
 
-    task_result = AsyncResult(task_id)
-    if not task_result.result:
-        return JSONResponse({'status': 'No task found motherf****r !'})
-
-    # result = eval(task_result.result)
-    path = task_result.result[1].get('path', False)
-
-    if not os.path.isfile(path):
-        return JSONResponse({'status': 'No file found at {}'.format(path)})
-
-    return StreamingResponse(iterfile(path), media_type="application/octet-stream")
+    return StreamingResponse(utils.iterfile(filepath), media_type="application/octet-stream")

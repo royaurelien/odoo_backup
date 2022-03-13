@@ -154,3 +154,4 @@ cython_debug/
 .log
 *.zip
 data/
+filestore/

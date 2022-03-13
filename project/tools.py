@@ -5,6 +5,7 @@ from os.path import basename
 from zipfile import ZipFile, ZIP_DEFLATED
 import psycopg2
 import json
+import shutil
 from sh import pg_dump
 
 DEFAULT_DUMP_FILENAME = "dump.sql"
@@ -20,6 +21,19 @@ DATA_DIR = "/usr/src/data"
 
 def generate_filename(dbname):
     return "{}_{}".format(dbname, datetime.now().strftime("%Y%m%d_%H%M"))
+
+def create_zip(filename):
+    pass
+
+def clean_workdir(path):
+    if not os.path.isdir(path):
+        return True
+    try:
+        shutil.rmtree(path)
+    except:
+        return False
+    return True
+
 
 def get_odoo_database(dbname):
     # Connect to your postgres DB
@@ -48,14 +62,7 @@ def dump_db_manifest(cr):
     }
     return manifest
 
-def create_odoo_manifest(path, db_name, filename=DEFAULT_MANIFEST_FILENAME):
-    manifest = False
-    with open(os.path.join(DATA_DIR, 'manifest.json'), 'w') as fh:
-        db = get_odoo_database(db_name)
-        with db.cursor() as cr:
-            manifest = dump_db_manifest(cr)
-            json.dump(manifest, fh, indent=4)
-    return manifest
+
 
 def _get_postgres_env():
     return {
@@ -65,21 +72,25 @@ def _get_postgres_env():
         'PGPASSWORD': POSTGRES_PASSWORD,
     }
 
-def create_db_dump(db_name, filename=DEFAULT_DUMP_FILENAME, cmd=[]):
+def create_db_dump(db_name, path, filename=DEFAULT_DUMP_FILENAME, cmd=[]):
 
     args = DEFAULT_DUMP_CMD
     len(cmd) and args.append(*cmd)
     args.append(db_name)
+    filepath = os.path.join(path, filename)
 
-    path = os.path.join(DATA_DIR, filename)
-
-    with gzip.open(path, "wb") as f:
+    with gzip.open(filepath, "wb") as f:
         pg_dump(*args, _out=f, _env=_get_postgres_env())
 
-    return (True, {'path':path})
+    stats = os.stat(filepath)
+
+    return (True, {'path': filepath, 'size': stats.st_size})
 
 
-def add_to_zip(zipfile, filename, **kwargs):
+def add_to_zip(files, zipfile, **kwargs):
+    extension = '.zip'
+    if not zipfile.endswith(extension):
+        zipfile += extension
 
     options = {
         'compression': ZIP_DEFLATED,
@@ -88,7 +99,28 @@ def add_to_zip(zipfile, filename, **kwargs):
     options.update(kwargs)
 
     with ZipFile(zipfile, 'w', **options) as myzip:
-        myzip.write(filename)
+        for filepath in files:
+            filepath = os.path.normpath(filepath)
+            filename = filepath[len(os.path.dirname(filepath))+1:]
+
+            if os.path.isfile(filepath):
+                myzip.write(filepath, filename)
+
+    stats = os.stat(zipfile)
+
+    return (True, {'path': zipfile, 'size':stats.st_size})
+
+
+def create_odoo_manifest(path, db_name, filename=DEFAULT_MANIFEST_FILENAME):
+    manifest = {}
+    filepath = os.path.join(path, filename)
+    with open(filepath, 'w') as fh:
+        db = get_odoo_database(db_name)
+        with db.cursor() as cr:
+            manifest = dump_db_manifest(cr)
+            json.dump(manifest, fh, indent=4)
+
+    return (filepath, manifest)
 
 
 def add_filestore_to_zip(zipfile, path):

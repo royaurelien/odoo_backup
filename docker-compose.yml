@@ -21,6 +21,7 @@ services:
     volumes:
       - ./project:/usr/src/app
       - ./data:/usr/src/data
+      - ./filestore:/usr/src/filestore
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
