@@ -91,10 +91,22 @@ def dump_db(data):
 
     return data
 
-@celery.task(name="add_filestore")
-def add_filestore(data):
+@celery.task(
+    name="add_filestore",
+    bind=True,
+    max_retries=1,
+    soft_time_limit=240
+    )
+def add_filestore(self, data):
     path = os.path.join(FILESTORE_PATH, data.get('db_name'))
     if not os.path.isdir(path):
-        raise NotImplementedError("u're piece of shit, motherf**** !")
+        raise FileNotFoundError("Filestore '{}' not found.".format(path))
+    success, results = tools.add_folder_to_zip(path, data['zip']['path'], task=self)
 
-    # self.update_state(state="PROGRESS", meta={'progress': 50})
+    return data
+
+@celery.task(name="clean_workdir")
+def clean_workdir(data):
+    success = tools.clean_workdir(data.get('workdir'), data.get('files'))
+
+    return data

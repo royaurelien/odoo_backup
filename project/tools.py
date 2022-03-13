@@ -25,11 +25,16 @@ def generate_filename(dbname):
 def create_zip(filename):
     pass
 
-def clean_workdir(path):
+def clean_workdir(path, files=[]):
     if not os.path.isdir(path):
         return True
     try:
-        shutil.rmtree(path)
+        if not files:
+            shutil.rmtree(path)
+        else:
+            for file in files:
+                if os.path.exists(file):
+                    os.remove(file)
     except:
         return False
     return True
@@ -123,7 +128,7 @@ def create_odoo_manifest(path, db_name, filename=DEFAULT_MANIFEST_FILENAME):
     return (filepath, manifest)
 
 
-def add_filestore_to_zip(zipfile, path):
+def add_folder_to_zip(path, zipfile, task=None):
     myzip = ZipFile(zipfile, 'a', compression=ZIP_DEFLATED, allowZip64=True)
 
     include_dir = True
@@ -132,6 +137,8 @@ def add_filestore_to_zip(zipfile, path):
     if len_prefix:
         len_prefix += 1
 
+    total = sum([len(files) for base, dirs, files in os.walk(path)])
+    count = 0
 
     for dirpath, dirnames, filenames in os.walk(path):
         # filenames = sorted(filenames, key=fnct_sort)
@@ -140,7 +147,18 @@ def add_filestore_to_zip(zipfile, path):
             ext = ext or bname
             if ext not in ['.pyc', '.pyo', '.swp', '.DS_Store']:
                 path = os.path.normpath(os.path.join(dirpath, fname))
+                count += 1
                 if os.path.isfile(path):
                     myzip.write(path, path[len_prefix:])
+            else:
+                count -= 1
+            progress = int((count * 100) / total)
+
+            if task and progress in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]:
+                task.update_state(state="PROGRESS", meta={'progress': progress})
+
 
     myzip.close()
+    stats = os.stat(zipfile)
+
+    return (True, {'path': zipfile, 'size':stats.st_size})

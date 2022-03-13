@@ -52,17 +52,18 @@ def run_task_dump(payload = Body(...)):
     dump = payload.get('dump', DEFAULT_DUMP_FORMAT)
 
     tasks = chain(
-        # wk.create_env.s(data),
-        # wk.create_odoo_manifest.s(),
-        # wk.dump_db.s(),
-        # wk.add_to_zip.s(),
+        wk.create_env.s(data),
+        wk.create_odoo_manifest.s(),
+        wk.dump_db.s(),
+        wk.add_to_zip.s(),
         # wk.add_filestore.s(data).set(link_error=wk.error_handler.s()),
-        wk.add_filestore.s(data),
+        wk.add_filestore.s(),
+        wk.clean_workdir.s(),
     ).on_error(wk.error_handler.s()).apply_async()
 
     result = {
         "task_id": tasks.id,
-        # "parent_id": [t.id for t in list(utils.unpack_parents(tasks))][-1],
+        "parent_id": [t.id for t in list(utils.unpack_parents(tasks))][-1],
         # "all": store(tasks)
     }
     return JSONResponse(result)
