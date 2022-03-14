@@ -110,3 +110,21 @@ def clean_workdir(data):
     success = tools.clean_workdir(data.get('workdir'), data.get('files'))
 
     return data
+
+@celery.task(name="restore_dump")
+def restore_dump(data):
+    success = tools.restore_db_dump(data.get('db_name'))
+
+    return data
+
+@celery.task(name="unzip_backup")
+def unzip_backup(data):
+    success = tools.unzip_backup(data.get('db_name'))
+
+    return data
+
+@celery.task(name="create_database")
+def create_database(data):
+    success = tools.create_database(data.get('db_name'))
+
+    return data

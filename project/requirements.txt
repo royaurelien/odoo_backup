@@ -1,11 +1,13 @@
-aiofiles==0.6.0
-celery==4.4.7
-fastapi==0.64.0
-flower==0.9.7
-Jinja2==2.11.3
+aiofiles==0.8.0
+celery==5.2.3
+fastapi==0.65.1
+flower==1.0.0
+Jinja2==3.0.3
 pytest==6.2.4
-redis==3.5.3
-requests==2.25.1
-uvicorn==0.13.4
-sh
-psycopg2-binary
+redis==4.1.4
+requests==2.27.1
+uvicorn==0.17.6
+sh==1.14.2
+# psycopg2-binary==2.9.3
+psycopg==3.0.10
+psycopg_pool

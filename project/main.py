@@ -90,3 +90,27 @@ def download(task_id):
         return JSONResponse({'status': error})
 
     return StreamingResponse(utils.iterfile(filepath), media_type="application/octet-stream")
+
+@app.post("/restore", status_code=201)
+def restore_backup(payload = Body(...)):
+    data = {
+        'db_name': payload["name"],
+        'filename': payload["filename"]
+    }
+
+    # filestore = payload.get('filestore', DEFAULT_DUMP_FS)
+    # dump = payload.get('dump', DEFAULT_DUMP_FORMAT)
+
+    tasks = chain(
+        wk.create_env.s(data),
+        wk.create_database.s(),
+        wk.unzip_backup.s(),
+        wk.restore_dump.s(),
+    ).apply_async()
+
+    result = {
+        "task_id": tasks.id,
+        # "parent_id": [t.id for t in list(utils.unpack_parents(tasks))][-1],
+        # "all": store(tasks)
+    }
+    return JSONResponse(result)

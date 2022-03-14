@@ -2,13 +2,16 @@ import json
 
 from unittest.mock import patch, call
 
-from worker import create_task
+from worker import create_task, restore_backup
 
 
 def test_home(test_app):
     response = test_app.get("/")
     assert response.status_code == 200
 
+
+def test_restore():
+    assert restore_backup.run(dict(db_name='test_1'))
 
 def test_task():
     assert create_task.run(1)

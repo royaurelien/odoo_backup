@@ -3,10 +3,16 @@ import gzip
 import os
 from os.path import basename
 from zipfile import ZipFile, ZIP_DEFLATED
-import psycopg2
+# import psycopg2
+
+# from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+import psycopg
 import json
 import shutil
-from sh import pg_dump
+from sh import pg_dump, psql
+from celery.utils.log import get_task_logger
+
+_logger = get_task_logger(__name__)
 
 DEFAULT_DUMP_FILENAME = "dump.sql"
 DEFAULT_DUMP_CMD = ["--no-owner"]
@@ -16,6 +22,9 @@ POSTGRES_USER = os.environ.get("POSTGRES_USER")
 POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
 POSTGRES_HOST = "db"
 POSTGRES_PORT = "5432"
+
+SQL_CREATE_DATABASE = 'CREATE DATABASE "{}";'
+SQL_SELECT_MODULES = "SELECT name, latest_version FROM ir_module_module WHERE state = 'installed'"
 
 DATA_DIR = "/usr/src/data"
 
@@ -40,28 +49,53 @@ def clean_workdir(path, files=[]):
     return True
 
 
-def get_odoo_database(dbname):
+def get_postgres_connection(dbname='postgres', **kwargs):
     # Connect to your postgres DB
     params = {
         'host': POSTGRES_HOST,
-        'dbname': dbname,
         'user': POSTGRES_USER,
         'password': POSTGRES_PASSWORD,
+        'dbname': dbname,
     }
-    conn = psycopg2.connect(**params)
-    # cr = conn.cursor()
+    params.update(kwargs)
+    # if dbname: params['dbname'] = dbname
+    try:
+        conn = psycopg.connect(**params)
+    except psycopg.errors.OperationalError as err:
+        message = err.diag.message_detail
+        _logger.error(err)
+        raise Exception(message)
+
     return conn
 
+def create_database(db_name):
+    # db.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+
+    with get_postgres_connection(autocommit=True) as conn:
+        cr = conn.cursor()
+        cr.execute(SQL_CREATE_DATABASE.format(db_name))
+
+    return True
+
+def guess_odoo_version(modules):
+    try:
+        return str(float(next(iter(modules.values())).split('.')[0]))
+    except:
+        return ""
+
 def dump_db_manifest(cr):
-    pg_version = "%d.%d" % divmod(cr.connection.server_version / 100, 100)
-    cr.execute("SELECT name, latest_version FROM ir_module_module WHERE state = 'installed'")
+    info = cr.connection.info
+    pg_version = "%d.%d" % divmod(info.server_version / 100, 100)
+    cr.execute(SQL_SELECT_MODULES)
     modules = dict(cr.fetchall())
+    version = guess_odoo_version(modules)
+
     manifest = {
         'odoo_dump': '1',
-        'db_name': cr.connection.get_dsn_parameters().get('dbname', False),
-        'version': 0,
-        'version_info': 0,
-        'major_version': 0,
+        'db_name': info.get_parameters().get('dbname', False),
+        'version': version,
+        'version_info': version,
+        'major_version': version,
         'pg_version': pg_version,
         'modules': modules,
     }
@@ -92,6 +126,35 @@ def create_db_dump(db_name, path, filename=DEFAULT_DUMP_FILENAME, cmd=[]):
     return (True, {'path': filepath, 'size': stats.st_size})
 
 
+def restore_db_dump(db_name, filepath, cmd=[]):
+
+    if not os.path.isfile(filepath):
+        raise FileNotFoundError(filepath)
+
+    args = ["-U", POSTGRES_USER, "-d", db_name, "-f", filepath]
+
+    psql(*args, _env=_get_postgres_env())
+
+    stats = os.stat(filepath)
+
+    return (True, {'path': filepath, 'size': stats.st_size})
+
+
+def unzip_backup(zipfile, path):
+    if not os.path.isfile(zipfile):
+        raise FileNotFoundError(zipfile)
+
+    if not os.path.isdir(path):
+        os.mkdir(path)
+
+    with ZipFile(zipfile, 'r') as myzip:
+        # Extract all the contents of zip file in different directory
+        myzip.extractall(path)
+
+    stats = os.stat(zipfile)
+    return (True, {'path': path, 'size': stats.st_size})
+
+
 def add_to_zip(files, zipfile, **kwargs):
     extension = '.zip'
     if not zipfile.endswith(extension):
@@ -120,7 +183,7 @@ def create_odoo_manifest(path, db_name, filename=DEFAULT_MANIFEST_FILENAME):
     manifest = {}
     filepath = os.path.join(path, filename)
     with open(filepath, 'w') as fh:
-        db = get_odoo_database(db_name)
+        db = get_postgres_connection(db_name)
         with db.cursor() as cr:
             manifest = dump_db_manifest(cr)
             json.dump(manifest, fh, indent=4)
