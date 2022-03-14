@@ -155,3 +155,5 @@ cython_debug/
 *.zip
 data/
 filestore/
+input/
+output/

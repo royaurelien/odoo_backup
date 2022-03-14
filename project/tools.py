@@ -24,6 +24,15 @@ POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
 POSTGRES_HOST = "db"
 POSTGRES_PORT = "5432"
 
+# 'C' collate is only safe with template0, but provides more useful indexes
+# collate = sql.SQL("LC_COLLATE 'C'" if chosen_template == 'template0' else "")
+# cr.execute(
+#     sql.SQL("CREATE DATABASE {} ENCODING 'unicode' {} TEMPLATE {}").format(
+#     sql.Identifier(name), collate, sql.Identifier(chosen_template)
+
+SQL_TEMPLATE = 'template0'
+SQL_COLLATE = "LC_COLLATE 'C'" if SQL_TEMPLATE == 'template0' else ""
+SQL_CREATE_ODOO_DATABASE = "CREATE DATABASE {} ENCODING 'unicode' {} TEMPLATE {}"
 SQL_CREATE_DATABASE = 'CREATE DATABASE "{}";'
 SQL_SELECT_MODULES = "SELECT name, latest_version FROM ir_module_module WHERE state = 'installed'"
 

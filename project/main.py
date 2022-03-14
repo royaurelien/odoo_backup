@@ -1,5 +1,5 @@
 from celery.result import AsyncResult
-from celery import chain
+from celery import chain, group
 from fastapi import Body, FastAPI, Form, Request
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,23 +20,15 @@ def home(request: Request):
     return JSONResponse({"request": "request"})
 
 
-# @app.post("/tasks", status_code=201)
-# def run_task(payload = Body(...)):
-#     task_type = payload["type"]
-#     task = wk.create_task.delay(int(task_type))
-#     return JSONResponse({"task_id": task.id})
-
-
 @app.get("/tasks/{task_id}")
 def get_status(task_id):
     task_result = AsyncResult(task_id)
 
     result = {
         "task_id": task_id,
+        "task_result": task_result.result,
         "task_status": task_result.status,
-        "all": [(t.name, t.status) for t in utils.iter_children(task_result)],
-        # "task_result": task_result.result,
-        # "tasks_status": [t.status for t in unpack_chain(task_result)],
+        "tasks_status": [(t.name, t.state) for t in utils.iter_children(task_result)],
     }
     # task_result.forget()
 
@@ -103,15 +95,15 @@ def restore_backup(payload = Body(...)):
 
     tasks = chain(
         wk.init_restore.s(data),
-        # wk.unzip_dump.s(),
-        # wk.create_database.s(),
-        # wk.restore_dump.s(),
-        wk.unzip_filestore.s(),
+        wk.unzip_dump.s(),
+        wk.create_database.s(),
+        wk.restore_dump.s(),
+        wk.unzip_filestore.s()
     ).apply_async()
 
     result = {
         "task_id": tasks.id,
-        # "parent_id": [t.id for t in list(utils.unpack_parents(tasks))][-1],
+        "parent_id": [t.id for t in list(utils.unpack_parents(tasks))][-1],
         # "all": store(tasks)
     }
     return JSONResponse(result)

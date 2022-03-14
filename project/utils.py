@@ -39,12 +39,12 @@ def store(node):
     return id_chain
 
 
-def _get_file_from_task(task_id):
+def _get_file_from_task(task_id, key='download'):
     task_result = AsyncResult(task_id)
     if not task_result.result:
         raise ValueError('No task found motherf****r !')
 
-    filepath = task_result.result.get('download', False)
+    filepath = task_result.result.get(key, False)
 
     if not os.path.isfile(filepath):
         raise ValueError('No file found at {}'.format(filepath))

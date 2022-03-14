@@ -14,7 +14,7 @@ celery.conf.result_extended = True
 celery.conf.timezone = 'Europe/Paris'
 celery.conf.enable_utc = True
 celery.conf.task_annotations = {
-    'create_env': {'rate_limit': '2/m'}
+    'create_env': {'rate_limit': '4/m'}
 }
 
 FILESTORE_PATH = '/usr/src/filestore'
@@ -99,9 +99,15 @@ def dump_db(data):
     )
 def add_filestore(self, data):
     path = os.path.join(FILESTORE_PATH, data.get('db_name'))
-    if not os.path.isdir(path):
-        raise FileNotFoundError("Filestore '{}' not found.".format(path))
-    success, results = tools.add_folder_to_zip(path, data['zip']['path'], task=self)
+    tools._check_path(path)
+
+    new_path = os.path.join(data['workdir'], 'filestore')
+    os.symlink(path, new_path)
+
+    success, results = tools.add_folder_to_zip(new_path, data['zip']['path'], task=self)
+
+    files = data.setdefault('files', [])
+    files.append(new_path)
 
     return data
 
@@ -144,14 +150,6 @@ def unzip_dump(data):
 
 @celery.task(name="restore_dump")
 def restore_dump(data):
-    # path = data['zip']['path']
-    # search = ['dump.sql']
-
-    # files = [os.path.join(path, f) for f in search if os.path.isfile(os.path.join(path, f))]
-    # file = files[0] if files else False
-
-    # if not file:
-    #     raise FileNotFoundError("Files not found: {}".format(", ".join(search)))
     file = data['dump']['path']
 
     success, results = tools.restore_db_dump(data.get('db_name'), file)
