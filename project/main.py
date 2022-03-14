@@ -103,9 +103,10 @@ def restore_backup(payload = Body(...)):
 
     tasks = chain(
         wk.init_restore.s(data),
-        wk.create_database.s(),
-        wk.unzip_backup.s(),
-        wk.restore_dump.s(),
+        # wk.unzip_dump.s(),
+        # wk.create_database.s(),
+        # wk.restore_dump.s(),
+        wk.unzip_filestore.s(),
     ).apply_async()
 
     result = {

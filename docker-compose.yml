@@ -8,7 +8,8 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --reload
     volumes:
       - ./project:/usr/src/app
-      - ./data:/usr/src/data
+      - ./input:/usr/src/input:rw,z
+      - ./output:/usr/src/output:rw,z
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
@@ -20,8 +21,9 @@ services:
     command: celery --app=worker.celery worker --autoscale=3 --loglevel=info --logfile=logs/celery.log
     volumes:
       - ./project:/usr/src/app
-      - ./data:/usr/src/data
-      - ./filestore:/usr/src/filestore
+      - ./input:/usr/src/input:rw,z
+      - ./output:/usr/src/output:rw,z
+      - ./filestore:/usr/src/filestore:rw,z
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0

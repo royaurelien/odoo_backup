@@ -66,7 +66,7 @@ def create_odoo_manifest(data):
 @celery.task(name="create_env")
 def create_env(data):
     # time.sleep(10)
-    workdir = os.path.join(tools.DATA_DIR, str(uuid.uuid4()))
+    workdir = os.path.join(tools.OUTPUT_DIR, str(uuid.uuid4()))
     filename = tools.generate_filename(data.get('db_name'))
     zipfile = os.path.join(workdir, filename)
 
@@ -117,9 +117,9 @@ def init_restore(data):
     filestore = os.path.join(FILESTORE_PATH, data.get('db_name'))
     if os.path.isdir(filestore):
         raise FileExistsError(filestore)
-    os.mkdir(filestore)
+    # os.mkdir(filestore)
 
-    zipfile = os.path.join(tools.DATA_DIR, data.get('filename'))
+    zipfile = os.path.join(tools.INPUT_DIR, data.get('filename'))
     if not os.path.isfile(zipfile):
         raise FileNotFoundError(zipfile)
 
@@ -130,16 +130,29 @@ def init_restore(data):
 
     return data
 
+@celery.task(name="unzip_dump")
+def unzip_dump(data):
+    unzip_files = tools.unzip_files(data.get('zipfile'), ['dump.sql'], prefix=data.get('db_name'))
+
+    if not unzip_files:
+        raise ValueError("No dump file found")
+
+    data['dump'] = unzip_files[0]
+
+    return data
+
+
 @celery.task(name="restore_dump")
 def restore_dump(data):
-    path = data['zip']['path']
-    search = ['dump.sql']
+    # path = data['zip']['path']
+    # search = ['dump.sql']
 
-    files = [os.path.join(path, f) for f in search if os.path.isfile(os.path.join(path, f))]
-    file = files[0] if files else False
+    # files = [os.path.join(path, f) for f in search if os.path.isfile(os.path.join(path, f))]
+    # file = files[0] if files else False
 
-    if not file:
-        raise FileNotFoundError("Files not found: {}".format(", ".join(search)))
+    # if not file:
+    #     raise FileNotFoundError("Files not found: {}".format(", ".join(search)))
+    file = data['dump']['path']
 
     success, results = tools.restore_db_dump(data.get('db_name'), file)
     data['dump'] = results
@@ -149,6 +162,13 @@ def restore_dump(data):
 @celery.task(name="unzip_backup")
 def unzip_backup(data):
     success, results = tools.unzip_backup(data.get('zipfile'), data.get('filestore'))
+    data['zip'] = results
+
+    return data
+
+@celery.task(name="unzip_filestore")
+def unzip_filestore(data):
+    success, results = tools.unzip_filestore(data.get('zipfile'), data.get('db_name'), FILESTORE_PATH)
     data['zip'] = results
 
     return data

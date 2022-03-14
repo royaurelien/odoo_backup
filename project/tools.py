@@ -2,6 +2,7 @@ from datetime import datetime
 import gzip
 import os
 from os.path import basename
+from tempfile import NamedTemporaryFile, TemporaryDirectory, mkdtemp
 from zipfile import ZipFile, ZIP_DEFLATED
 # import psycopg2
 
@@ -26,13 +27,12 @@ POSTGRES_PORT = "5432"
 SQL_CREATE_DATABASE = 'CREATE DATABASE "{}";'
 SQL_SELECT_MODULES = "SELECT name, latest_version FROM ir_module_module WHERE state = 'installed'"
 
-DATA_DIR = "/usr/src/data"
+OUTPUT_DIR = "/usr/src/output"
+INPUT_DIR = "/usr/src/input"
 
 def generate_filename(dbname):
     return "{}_{}".format(dbname, datetime.now().strftime("%Y%m%d_%H%M"))
 
-def create_zip(filename):
-    pass
 
 def clean_workdir(path, files=[]):
     if not os.path.isdir(path):
@@ -140,9 +140,49 @@ def restore_db_dump(db_name, filepath, cmd=[]):
     return (True, {'path': filepath, 'size': stats.st_size})
 
 
+def _check_path(path, raise_if_not_found=True):
+    if not os.path.exists(path):
+        if raise_if_not_found:
+            raise FileNotFoundError(path)
+
+def unzip_files(zipfile, files, **options):
+
+    _check_path(zipfile)
+
+    # tmp_dir = TemporaryDirectory(**options)
+    tmp_dir = mkdtemp(**options)
+    unzip_files = []
+
+    with ZipFile(zipfile, 'r') as myzip:
+        for f in files:
+            try:
+                myzip.extract(f, path=tmp_dir)
+                new_file = os.path.join(tmp_dir, f)
+                stats = os.stat(new_file)
+                unzip_files.append({'path': new_file, 'size': stats.st_size})
+            except KeyError:
+                print("No file found: {}".format(f))
+                continue
+
+    return unzip_files
+
+
+def unzip_filestore(zipfile, db_name, path):
+    _check_path(zipfile)
+
+    with TemporaryDirectory() as tmp_dir:
+        with ZipFile(zipfile, 'r') as myzip:
+            files = [f for f in myzip.namelist() if f.startswith('filestore/')]
+            for f in files:
+                myzip.extract(f, path=tmp_dir)
+        shutil.move(os.path.join(tmp_dir, "filestore"), os.path.join(tmp_dir, db_name))
+        shutil.move(os.path.join(tmp_dir, db_name), path)
+
+    stats = os.stat(zipfile)
+    return (True, {'path': path, 'size': stats.st_size})
+
 def unzip_backup(zipfile, path):
-    if not os.path.isfile(zipfile):
-        raise FileNotFoundError(zipfile)
+    _check_path(zipfile)
 
     if not os.path.isdir(path):
         os.mkdir(path)
