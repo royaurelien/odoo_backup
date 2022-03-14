@@ -102,7 +102,7 @@ def restore_backup(payload = Body(...)):
     # dump = payload.get('dump', DEFAULT_DUMP_FORMAT)
 
     tasks = chain(
-        wk.create_env.s(data),
+        wk.init_restore.s(data),
         wk.create_database.s(),
         wk.unzip_backup.s(),
         wk.restore_dump.s(),

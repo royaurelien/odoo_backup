@@ -111,15 +111,45 @@ def clean_workdir(data):
 
     return data
 
+
+@celery.task(name="init_restore")
+def init_restore(data):
+    filestore = os.path.join(FILESTORE_PATH, data.get('db_name'))
+    if os.path.isdir(filestore):
+        raise FileExistsError(filestore)
+    os.mkdir(filestore)
+
+    zipfile = os.path.join(tools.DATA_DIR, data.get('filename'))
+    if not os.path.isfile(zipfile):
+        raise FileNotFoundError(zipfile)
+
+    data.update({
+        'filestore': filestore,
+        'zipfile': zipfile,
+    })
+
+    return data
+
 @celery.task(name="restore_dump")
 def restore_dump(data):
-    success = tools.restore_db_dump(data.get('db_name'))
+    path = data['zip']['path']
+    search = ['dump.sql']
+
+    files = [os.path.join(path, f) for f in search if os.path.isfile(os.path.join(path, f))]
+    file = files[0] if files else False
+
+    if not file:
+        raise FileNotFoundError("Files not found: {}".format(", ".join(search)))
+
+    success, results = tools.restore_db_dump(data.get('db_name'), file)
+    data['dump'] = results
 
     return data
 
 @celery.task(name="unzip_backup")
 def unzip_backup(data):
-    success = tools.unzip_backup(data.get('db_name'))
+    success, results = tools.unzip_backup(data.get('zipfile'), data.get('filestore'))
+    data['zip'] = results
 
     return data
 
