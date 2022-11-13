@@ -79,7 +79,7 @@ def download(task_id):
     try:
         filepath = utils._get_file_from_task(task_id)
     except ValueError as error:
-        return JSONResponse({'status': error})
+        return JSONResponse({'status': str(error)})
 
     return StreamingResponse(utils.iterfile(filepath), media_type="application/octet-stream")
 
